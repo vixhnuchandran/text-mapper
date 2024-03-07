@@ -6,6 +6,7 @@ import "./App.css";
 const App = () => {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [ocrResult, setOcrResult] = useState<File | null>(null);
+  const [extractedText, setExtractedText] = useState<string>("");
   const [loading, setLoading] = useState(false);
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -32,6 +33,9 @@ const App = () => {
             const { x0, y0, x1, y1 } = word.bbox;
             ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
           }
+
+          const extractedText = words.map((word) => word.text).join(" ");
+          setExtractedText(extractedText);
 
           const dataUrl = canvas.toDataURL("image/png");
 
@@ -125,6 +129,16 @@ const App = () => {
                           </button>
                         </div>
                       </div>
+                      {/* Add the text area here */}
+                      {ocrResult && (
+                        <div className="mt-3 sm:ml-3 sm:mt-0">
+                          <textarea
+                            className="w-full h-80 mt-3 px-3 py-2 text-gray-700 border rounded-lg focus:outline-none"
+                            value={extractedText}
+                            readOnly
+                          />
+                        </div>
+                      )}
                     </form>
                   </div>
                 </div>
@@ -136,7 +150,7 @@ const App = () => {
                   {ocrResult && (
                     <div>
                       <img
-                        className="w-full lg:absolute lg:inset-y-0 lg:left-0 lg:h-full lg:w-auto lg:max-w-none"
+                        className=" flex justify-center items-center max-w-4xl "
                         src={URL.createObjectURL(ocrResult)}
                         alt=""
                       />
