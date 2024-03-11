@@ -22,7 +22,7 @@ const App = () => {
       const formData = new FormData();
       formData.append("image", imageFile as Blob);
 
-      const response = await fetch("http://54.234.223.143/ocr-service", {
+      const response = await fetch("https://54.234.223.143/ocr-service", {
         method: "POST",
         body: formData,
       });
