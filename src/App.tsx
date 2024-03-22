@@ -1,9 +1,11 @@
 import { useState, ChangeEvent } from "react";
+import Tesseract from "tesseract.js";
+import { loadImage, createCanvas } from "canvas";
 import "./App.css";
 
 const App = () => {
   const [imageFile, setImageFile] = useState<File | null>(null);
-  const [ocrResult, setOcrResult] = useState<string>("");
+  const [ocrResult, setOcrResult] = useState<File | null>(null);
   const [extractedText, setExtractedText] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -11,38 +13,51 @@ const App = () => {
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       setImageFile(e.target.files[0]);
-      setOcrResult(""); // Clear previous OCR result
+      setOcrResult(null);
     }
   };
 
-  const processImageOnServer = async () => {
+  const processImage = (imagePath: string) => {
     setLoading(true);
 
-    try {
-      const formData = new FormData();
-      formData.append("image", imageFile as Blob);
+    loadImage(imagePath).then((image) => {
+      const canvas = createCanvas(image.width, image.height);
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(image, 0, 0);
 
-      const response = await fetch("https://54.234.223.143/ocr-service", {
-        method: "POST",
-        body: formData,
-      });
+      Tesseract.recognize(imagePath, "eng")
+        .then(({ data: { words } }) => {
+          ctx.strokeStyle = "red";
+          ctx.lineWidth = 2;
 
-      if (response.ok) {
-        const result = await response.json();
-        setExtractedText(result.extractedText);
-        if (result.processedImage) {
-          setOcrResult(result.processedImage);
-        } else {
-          console.error("No processed image received from the server");
-        }
-      } else {
-        console.error("Failed to process image");
-      }
-    } catch (error) {
-      console.error("Error:", error);
-    }
+          for (const word of words) {
+            const { x0, y0, x1, y1 } = word.bbox;
+            ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+          }
 
-    setLoading(false);
+          const extractedText = words.map((word) => word.text).join(" ");
+          setExtractedText(extractedText);
+
+          const dataUrl = canvas.toDataURL("image/png");
+
+          const byteString = atob(dataUrl.split(",")[1]);
+          const mimeString = dataUrl.split(",")[0].split(":")[1].split(";")[0];
+          const ab = new ArrayBuffer(byteString.length);
+          const ia = new Uint8Array(ab);
+          for (let i = 0; i < byteString.length; i++) {
+            ia[i] = byteString.charCodeAt(i);
+          }
+
+          const blob = new Blob([ab], { type: mimeString });
+
+          const file = new File([blob], "processed_image.png");
+
+          setOcrResult(file);
+          setLoading(false);
+        })
+        .catch((error) => console.error("Error:", error))
+        .finally(() => setLoading(false));
+    });
   };
 
   const handleUpload = () => {
@@ -50,7 +65,8 @@ const App = () => {
       if (ocrResult) {
         downloadFile(ocrResult);
       } else {
-        processImageOnServer();
+        const imagePath = URL.createObjectURL(imageFile);
+        processImage(imagePath);
       }
     }
   };
@@ -63,12 +79,19 @@ const App = () => {
     }, 2000);
   };
 
-  const downloadFile = (file: string) => {
+  const downloadFile = (file: File) => {
+    const originalName = file.name.split(".")[0];
+    const extension = file.name.split(".").pop();
+    const newFileName = `${originalName}out.${extension}`;
+
+    const url = URL.createObjectURL(file);
     const link = document.createElement("a");
-    link.href = `data:image/png;base64,${file}`;
-    link.download = "processed_image.png";
+    link.href = url;
+    link.setAttribute("download", newFileName);
     document.body.appendChild(link);
     link.click();
+
+    URL.revokeObjectURL(url);
     document.body.removeChild(link);
   };
 
@@ -79,7 +102,7 @@ const App = () => {
           <div className="mx-auto max-w-7xl lg:px-8">
             <div className="lg:grid lg:grid-cols-2 lg:gap-8">
               <div className="mx-auto max-w-md px-6 sm:max-w-2xl sm:text-center lg:flex lg:items-center lg:px-0 lg:text-left">
-                <div className="lg:py-12">
+                <div className="lg:py-24">
                   <h1 className="text-4xl font-bold tracking-tight text-white sm:text-6xl lg:mt-6 xl:text-6xl">
                     <span className="block">Experience the power of</span>
                     <span className="block mt-4 text-indigo-400">
@@ -115,7 +138,6 @@ const App = () => {
                           </button>
                         </div>
                       </div>
-                      {/* Add the text area here */}
                       {ocrResult && (
                         <div className="flex flex-col mt-3 sm:ml-3 sm:mt-0 justify-end">
                           <div className="flex justify-end items-center mt-3">
@@ -152,7 +174,7 @@ const App = () => {
                     <div>
                       <img
                         className="flex justify-center items-center max-w-4xl"
-                        src={`data:image/png;base64,${ocrResult}`}
+                        src={URL.createObjectURL(ocrResult)}
                         alt="Processed Image"
                       />
                     </div>
